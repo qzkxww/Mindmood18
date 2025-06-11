@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, Mail, Eye, EyeOff } from 'lucide-react-native';
+import { useAuth } from '@/hooks/useAuth';
 import Animated, { 
   FadeIn, 
   SlideInDown,
@@ -15,12 +16,13 @@ import Animated, {
 
 export default function EmailSignInScreen() {
   const router = useRouter();
+  const { signIn, signUp, resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
 
   // Animation values
   const buttonScale = useSharedValue(1);
@@ -36,7 +38,7 @@ export default function EmailSignInScreen() {
   };
 
   const handleContinue = async () => {
-    const newErrors: { email?: string; password?: string } = {};
+    const newErrors: { email?: string; password?: string; general?: string } = {};
 
     if (!email) {
       newErrors.email = 'Email is required';
@@ -63,11 +65,56 @@ export default function EmailSignInScreen() {
         buttonScale.value = withSpring(1);
       });
 
-      // Simulate authentication
-      setTimeout(() => {
+      try {
+        let result;
+        if (isSignUp) {
+          result = await signUp(email, password);
+        } else {
+          result = await signIn(email, password);
+        }
+
+        if (result.error) {
+          setErrors({ general: result.error.message });
+        } else {
+          // Check if user needs onboarding
+          if (isSignUp) {
+            router.replace('/onboarding');
+          } else {
+            router.replace('/(tabs)');
+          }
+        }
+      } catch (error) {
+        setErrors({ general: 'An unexpected error occurred. Please try again.' });
+      } finally {
         setIsLoading(false);
-        router.replace('/(tabs)');
-      }, 1500);
+      }
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setErrors({ email: 'Please enter your email address first' });
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setErrors({ email: 'Please enter a valid email address' });
+      return;
+    }
+
+    try {
+      const { error } = await resetPassword(email);
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        Alert.alert(
+          'Password Reset',
+          'Check your email for a password reset link.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send password reset email. Please try again.');
     }
   };
 
@@ -134,6 +181,16 @@ export default function EmailSignInScreen() {
               style={styles.formContainer}
               entering={SlideInDown.delay(400).duration(800).easing(Easing.out(Easing.cubic))}
             >
+              {/* General Error */}
+              {errors.general && (
+                <Animated.View 
+                  style={styles.errorContainer}
+                  entering={FadeIn.duration(300)}
+                >
+                  <Text style={styles.generalErrorText}>{errors.general}</Text>
+                </Animated.View>
+              )}
+
               {/* Email Input */}
               <View style={styles.inputContainer}>
                 <View style={[
@@ -148,8 +205,8 @@ export default function EmailSignInScreen() {
                     value={email}
                     onChangeText={(text) => {
                       setEmail(text);
-                      if (errors.email) {
-                        setErrors(prev => ({ ...prev, email: undefined }));
+                      if (errors.email || errors.general) {
+                        setErrors(prev => ({ ...prev, email: undefined, general: undefined }));
                       }
                     }}
                     keyboardType="email-address"
@@ -186,8 +243,8 @@ export default function EmailSignInScreen() {
                     value={password}
                     onChangeText={(text) => {
                       setPassword(text);
-                      if (errors.password) {
-                        setErrors(prev => ({ ...prev, password: undefined }));
+                      if (errors.password || errors.general) {
+                        setErrors(prev => ({ ...prev, password: undefined, general: undefined }));
                       }
                     }}
                     secureTextEntry={!showPassword}
@@ -226,9 +283,7 @@ export default function EmailSignInScreen() {
               {!isSignUp && (
                 <TouchableOpacity 
                   style={styles.forgotPassword}
-                  onPress={() => {
-                    // Handle forgot password
-                  }}
+                  onPress={handleForgotPassword}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.forgotPasswordText}>Forgot password?</Text>
@@ -342,6 +397,19 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     gap: 24,
+  },
+  errorContainer: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  generalErrorText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#dc2626',
+    textAlign: 'center',
   },
   inputContainer: {
     gap: 8,

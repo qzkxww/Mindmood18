@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Dimensions, Mod
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, Sun, Globe, X, Mail } from 'lucide-react-native';
+import { useAuth } from '@/hooks/useAuth';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
@@ -19,6 +20,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { user, loading } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [language, setLanguage] = useState('EN');
   const [showSignInModal, setShowSignInModal] = useState(false);
@@ -32,6 +34,13 @@ export default function WelcomeScreen() {
   const particle4Float = useSharedValue(0);
   const modalScale = useSharedValue(0);
   const modalOpacity = useSharedValue(0);
+
+  // Redirect if user is already authenticated
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/(tabs)');
+    }
+  }, [user, loading]);
 
   useEffect(() => {
     // Core pulsing animation
@@ -134,6 +143,19 @@ export default function WelcomeScreen() {
   const toggleLanguage = () => {
     setLanguage(language === 'EN' ? 'ES' : 'EN');
   };
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: '#ffffff' }]}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   const theme = {
     background: isDarkMode ? '#0f172a' : '#ffffff',
@@ -446,6 +468,16 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#64748b',
   },
   header: {
     flexDirection: 'row',
